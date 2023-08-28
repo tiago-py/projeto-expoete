@@ -91,7 +91,7 @@ app.layout = dbc.Container(children=[
                          html.Legend("Analise dos preços da Gasolina")
                      ], sm=8),
                      dbc.Col([
-                         html.I(className='fas fa-gas-pump',
+                         html.I(className='fa fa-filter',
                                 style={'font-size': '300%'})
                      ], sm=4, align="center")
                      ]),
@@ -283,76 +283,304 @@ app.layout = dbc.Container(children=[
 
 # ======== Callbacks ========== #
 
+#GRAFICO MAX/MIN
 @app.callback(
     Output('static-maxmin', 'figure'),
-    Input('dataset', 'data'),
-    Input(ThemeSwitchAIO.ids.switch("theme"), "value")
+    [Input('dataset', 'data'),
+    Input(ThemeSwitchAIO.ids.switch("theme"), "value")]
 )
-
 def func(data, toggle):
     template = template_theme1 if toggle else template_theme2
-    
-    dff = pd.DataFrame(data)
 
-    max = dff.groupby(['ANO'])['VALOR REVENDA (R$/L)'].max()
-    min = dff.groupby(['ANO'])['VALOR REVENDA (R$/L)'].min()
+    dff=pd.DataFrame(data)
+    max= dff.groupby(['ANO'])['VALOR REVENDA (R$/L)'].max()
+    min= dff.groupby(['ANO'])['VALOR REVENDA (R$/L)'].min()
 
     final_df = pd.concat([max, min], axis=1)
-    final_df.columns =  ['Máximo','Mínimo']
+    final_df.columns = ['Max', 'Min']
 
     fig = px.line(final_df, x=final_df.index, y=final_df.columns, template=template)
-    fig.update_layout(main_config, height=150, xaxis_title = None, yaxis_title = None)
+    
+    # UPDATE
+    fig.update_layout(main_config, height=150, xaxis_title=None, yaxis_title=None)
+
+    return fig
+# CALBACK DAS BARRAS HORIZONTAIS 
+@app.callback(
+    [Output('regiaobar_graph', 'figure'),
+    Output('estadobar_graph', 'figure')],
+    [Input('dataset_fixed', 'data'),
+    Input('select_ano', 'value'),
+    Input('select_regiao', 'value'),
+    Input(ThemeSwitchAIO.ids.switch("theme"), "value")]
+)
+
+# ALTERAÇÃO DO TEMA NO GRAFICO
+def graph1(data, ano, regiao, toggle):
+    template = template_theme1 if toggle else template_theme2
+
+#FILTRANDO DATAFRAME POR ANO 
+    df = pd.DataFrame(data)
+    df_filtered = df[df.ANO.isin([ano])]
+
+#CRIANDO UM DATEFRAME PARA REGIÃO/ ESTADO PARA POSSIBILITAR A MANIPULAÇÃO E A MÉDIA
+    dff_regiao = df_filtered.groupby(['ANO', 'REGIÃO'])['VALOR REVENDA (R$/L)'].mean().reset_index()
+    dff_estado = df_filtered.groupby(['ANO', 'ESTADO', 'REGIÃO'])['VALOR REVENDA (R$/L)'].mean().reset_index()
+    dff_estado = dff_estado[dff_estado.REGIÃO.isin([regiao])]
+
+#ORGANIZANDO DE FORMA ASCENDENTE
+    dff_regiao = dff_regiao.sort_values(by='VALOR REVENDA (R$/L)',ascending=True)
+    dff_estado = dff_estado.sort_values(by='VALOR REVENDA (R$/L)',ascending=True)
+
+# DEFININDO 2 CASAS DECIMAIS 
+    dff_regiao['VALOR REVENDA (R$/L)'] = dff_regiao['VALOR REVENDA (R$/L)'].round(decimals = 2)
+    dff_estado['VALOR REVENDA (R$/L)'] = dff_estado['VALOR REVENDA (R$/L)'].round(decimals = 2)
+#TEXTO PARA FIGURA 1 E PARA FIGURA 2 
+    fig1_text = [f'{x} - R${y}' for x,y in zip(dff_regiao.REGIÃO.unique(), dff_regiao['VALOR REVENDA (R$/L)'].unique())]
+    fig2_text = [f'R${y} - {x}' for x,y in zip(dff_estado.ESTADO.unique(), dff_estado['VALOR REVENDA (R$/L)'].unique())]
+
+#GERANDO A FIGURA 1
+    fig1 = go.Figure(go.Bar(
+        x=dff_regiao['VALOR REVENDA (R$/L)'],
+        y=dff_regiao['REGIÃO'],
+        orientation='h',
+        text=fig1_text,
+        textposition='auto',
+        insidetextanchor='end',
+        insidetextfont=dict(family='Times', size=12)
+    ))
+    #GERANDO A FIGURA 2
+    fig2 = go.Figure(go.Bar(
+        x=dff_estado['VALOR REVENDA (R$/L)'],
+        y=dff_estado['ESTADO'],
+        orientation='h',
+        text=fig2_text,
+        insidetextanchor='end',
+        insidetextfont=dict(family='Times', size=12) 
+    ))
+
+    #INSERINDO TEMPLATE
+    fig1.update_layout(main_config, yaxis={'showticklabels':False}, height=150, template=template)
+    fig2.update_layout(main_config, yaxis={'showticklabels':False}, height=150, template=template)
+
+    # RANGE
+    fig1.update_layout(xaxis_range=[dff_regiao['VALOR REVENDA (R$/L)'].max(), dff_regiao['VALOR REVENDA (R$/L)'].min() - 0.15])
+    fig2.update_layout(xaxis_range=[dff_estado['VALOR REVENDA (R$/L)'].min() - 0.15, dff_estado['VALOR REVENDA (R$/L)'].max()])
+
+    return [fig1, fig2]
+
+# COMPARAÇÃO GRAFICO
+@app.callback(
+    Output('animation_graph', 'figure'),
+    [Input('dataset', 'data'), 
+    Input('select_estados0', 'value'),
+    Input(ThemeSwitchAIO.ids.switch("theme"), "value")]
+)
+def animation(data, estados, toggle):
+
+    template = template_theme1 if toggle else template_theme2
+    
+
+    dff = pd.DataFrame(data)
+    #TODO NOME ESTIVER NA LINHA DE ESTADO ELE IRA TRAZER
+    mask = dff.ESTADO.isin(estados)
+    #TRAZENDO A FIG
+    fig = px.line(dff[mask], x='DATA', y='VALOR REVENDA (R$/L)',
+        color='ESTADO', template=template)
+    
+    # UPDATE
+    fig.update_layout(main_config, height=400, xaxis_title=None)
 
     return fig
 
+# COMPARAÇÃO DIRETA GRAFICO
 @app.callback(
-        [
-            Output('regiaobar_graph', 'figure'),
-            Output('estadobar_graph','figure')
-        ]
-        [
-            Input('dataset_fixed','data'),
-            Input('sekect_ano','value'),
-            Input('select_regiao','value'),
-            Input(ThemeSwitchAIO.ids.switch("theme"), "value")
-        ]
+    [Output('direct_comparison_graph', 'figure'),
+    Output('desc_comparison', 'children')],
+    [Input('dataset', 'data'),
+    Input('select_estado1', 'value'),
+    Input('select_estado2', 'value'),
+    Input(ThemeSwitchAIO.ids.switch("theme"), "value")]
 )
-def graph1(data, ano, regiao, toggle):
+def func(data, est1, est2, toggle):
+
     template = template_theme1 if toggle else template_theme2
-    df = pd.DataFrame(data)
-    df_filtered = df[df.ANO.isin([ano])]
-    dff_regiao = df_filtered.groupby(['ANO', 'REGIAO'])
+
+    dff = pd.DataFrame(data)
+    #SEPARANDO EM 2 DATAFRAME E CRIANDO UM FINAL 
+    df1 = dff[dff.ESTADO.isin([est1])]
+    df2 = dff[dff.ESTADO.isin([est2])]
+    df_final = pd.DataFrame()
+    
+    #CRIANDO UMA VARIAVEL APARTIR DA MÉDIA DE VALORES DELES
+    df_estado1 = df1.groupby(pd.PeriodIndex(df1['DATA'], freq="M"))['VALOR REVENDA (R$/L)'].mean().reset_index()
+    df_estado2 = df2.groupby(pd.PeriodIndex(df2['DATA'], freq="M"))['VALOR REVENDA (R$/L)'].mean().reset_index()
+
+    # DADO DE PERIODO DO PANDAS 
+    df_estado1['DATA'] = pd.PeriodIndex(df_estado1['DATA'], freq="M")
+    df_estado2['DATA'] = pd.PeriodIndex(df_estado2['DATA'], freq="M")
+
+    #CRIANDO COLUNA DATA E A COLUNA DE VALOR DE REVENDA 
+    df_final['DATA'] = df_estado1['DATA'].astype('datetime64[ns]')
+    df_final['VALOR REVENDA (R$/L)'] = df_estado1['VALOR REVENDA (R$/L)']-df_estado2['VALOR REVENDA (R$/L)']
+    
+    
+    fig = go.Figure()
+    #TODO O CAMINHO PRIMEIRA LINHA
+    fig.add_scattergl(name=est1, x=df_final['DATA'], y=df_final['VALOR REVENDA (R$/L)'])
+    # ABAIXO DE ZERO
+    fig.add_scattergl(name=est2, x=df_final['DATA'], y=df_final['VALOR REVENDA (R$/L)'].where(df_final['VALOR REVENDA (R$/L)'] > 0.00000))
+
+    # UPDATE
+    fig.update_layout(main_config, height=350, template=template)
+
+    fig.update_yaxes(range = [-0.7,0.7])
+
+    # MOSTRAR QUEM É MAIS BARATO EM ANOTAÇAÕ
+    fig.add_annotation(text=f'{est2} é mais barato',
+        xref="paper", yref="paper",
+        font=dict(
+            family="Courier New, monospace",
+            size=12,
+            color="#ffffff"
+            ),
+        align="center", bgcolor="rgba(0,0,0,0.5)", opacity=0.8,
+        x=0.1, y=0.75, showarrow=False)
+
+    fig.add_annotation(text=f'{est1} é mais barato',
+        xref="paper", yref="paper",
+        font=dict(
+            family="Courier New, monospace",
+            size=12,
+            color="#ffffff"
+            ),
+        align="center", bgcolor="rgba(0,0,0,0.5)", opacity=0.8,
+        x=0.1, y=0.25, showarrow=False) 
+
+    # Definindo o texto
+    text = f"Comparando {est1} e {est2}. Se a linha estiver acima do eixo X, {est2} tinha menor preço, do contrário, {est1} tinha um valor inferior"
+    return [fig, text]
+
+# INDICAFOR 1
+@app.callback(
+    Output("card1_indicators", "figure"),
+    [Input('dataset', 'data'), 
+    Input('select_estado1', 'value'),
+    Input(ThemeSwitchAIO.ids.switch("theme"), "value")]
+)
+def card1(data, estado, toggle):
+
+    template = template_theme1 if toggle else template_theme2
+
+
+    dff = pd.DataFrame(data)
+    #FILTRANDO POR ESTADOS
+    df_final = dff[dff.ESTADO.isin([estado])]
+    #ANO MIN E ANO MAX
+    data1 = str(int(dff.ANO.min()) - 1)
+    data2 = dff.ANO.max()   
+    
+    fig = go.Figure()
+    #ADICIONAR  UM TRACE 
+    fig.add_trace(go.Indicator(
+        mode = "number+delta",
+        title = {"text": f"<span style='size:50%'>{estado}</span><br><span style='font-size:0.7em'>{data1} - {data2}</span>"},
+        #ULTIMO VALOR REGISTRADO
+        value = df_final.at[df_final.index[-1],'VALOR REVENDA (R$/L)'],
+        #REFATORANDO O VALOR 
+        number = {'prefix': "R$", 'valueformat': '.2f'},
+        #DIFERENÇA
+        delta = {'relative': True, 'valueformat': '.1%', 'reference': df_final.at[df_final.index[0],'VALOR REVENDA (R$/L)']}
+    ))
+    
+    fig.update_layout(main_config, height=250, template=template)
+    
+    return fig
+
+# INDICADOR 2
 @app.callback(
     Output("card2_indicators", "figure"),
- [  Input('dataset', 'data'),
+    [Input('dataset', 'data'), 
     Input('select_estado2', 'value'),
-    Input(ThemeSwitchAIO.ids.switch("theme"), "value")
- ]
+    Input(ThemeSwitchAIO.ids.switch("theme"), "value")]
 )
-
 def card2(data, estado, toggle):
     template = template_theme1 if toggle else template_theme2
-    
+
     dff = pd.DataFrame(data)
+    #FILTRANDO POR ESTADOS
     df_final = dff[dff.ESTADO.isin([estado])]
-
-    data1 =  str(int(dff.ANO.min())-1)
+    #ANO MIN E ANO MAX
+    data1 = str(int(dff.ANO.min()) - 1)
     data2 = dff.ANO.max()
-
+    
     fig = go.Figure()
 
     fig.add_trace(go.Indicator(
         mode = "number+delta",
-        title = {"text": f"<span style = 'size=60%'>{estado}</span><br><span style = 'font-size:0.7em'>{data1} - {data2}</span>"},
-        value = df_final.at[df_final.index[-1], 'VALOR REVENDA (R$/L)'],
-        number =  {'prefix': "R$", 'valueformat':'.2f'},
-        delta = {'relative': True, 'valueformat': '.1%', 'reference': df_final.at[df_final.index[0], 'VALOR REVENDA (R$/L)'] }
+       
+        title = {"text": f"<span style='size:50%'>{estado}</span><br><span style='font-size:0.7em'>{data1} - {data2}</span>"},
+        #ULTIMO VALOR REGISTRADO
+        value = df_final.at[df_final.index[-1],'VALOR REVENDA (R$/L)'],
+        #REFATORANDO O VALOR 
+        number = {'prefix': "R$", 'valueformat': '.2f'},
+        #DIFERENÇA
+        delta = {'relative': True, 'valueformat': '.1%', 'reference': df_final.at[df_final.index[0],'VALOR REVENDA (R$/L)']}
     ))
-
-    fig.update_layout(main_config, height=250, template = template)
-
+    
+    fig.update_layout(main_config, height=250, template=template)
+    
     return fig
 
+# DATA RANGE
+@app.callback(
+    Output('dataset', 'data'),
+    [Input('rangeslider', 'value'),
+    Input('dataset_fixed', 'data')], prevent_initial_call=True
+)
+def range_slider(range, data):
+    dff = pd.DataFrame(data)
+    #O DATAFRAME ESTA DENTRO DA DATA INICIAL E ATÉ A DATA FINAL 
+    dff = dff[(dff['ANO'] >= f'{range[0]}-01-01') & (dff['ANO'] <= f'{range[1]}-31-12')]
+    #TRANSFORMANDO EM DICIONARIO 
+    data = dff.to_dict()
+    # RETORNANDO DE VOLTA PARA O DATASET - PEGA DADOS DO FIXO E PASSA PARA O ALTERAVEL 
+    return data
+
+#  ANIMAÇÃO RANGESLIDER
+@app.callback(
+    Output('rangeslider', 'value'),
+    Output('controller', 'data'), 
+
+    Input('interval', 'n_intervals'),
+    Input('play-button', 'n_clicks'),
+    Input('stop-button', 'n_clicks'),
+#ONDE O RANGESLIDER ESTÁ E SE ESTA PAUSADO OU RODANDO O PLAY
+    State('rangeslider', 'value'), 
+    State('controller', 'data'), 
+    prevent_initial_callbacks = True)
+
+def controller(n_intervals, play, stop, rangeslider, controller):
+    #Qual dos inputs estão sendo clicados (play, pause)
+    trigg = dash.callback_context.triggered[0]["prop_id"]
+
+    # se for falso ele vira true ao clicar no play o rangeslider vai para 2007
+    if ('play-button' in trigg and not controller["play"]):
+        if not controller["play"]:
+            controller["play"] = True
+            rangeslider[1] = 2007
+    # se o play estiver ativado ele pausa    
+    elif 'stop-button' in trigg:
+        if controller["play"]:
+            controller["play"] = False
+    # se ele chegar ao valor maximo ele pausa 
+    if controller["play"]:
+        if rangeslider[1] == 2021:
+            controller['play'] = False
+        rangeslider[1] += 1 if rangeslider[1] < 2021 else 0
+    
+    #retorna o valor da direita e se é para rodar ou não 
+    return rangeslider, controller
 # Run server
 if __name__ == '__main__':
     app.run_server(debug=True)
