@@ -88,7 +88,7 @@ app.layout = dbc.Container(children=[
                 dbc.CardBody([
                     dbc.Row([
                      dbc.Col([
-                         html.Legend("Analise dos preços da Gasolina")
+                         html.Legend("Analise Clubes Brasileirão série A 2023")
                      ], sm=8),
                      dbc.Col([
                          html.I(className='fa fa-filter',
@@ -118,7 +118,7 @@ app.layout = dbc.Container(children=[
                 dbc.CardBody([
                     dbc.Row([
                      dbc.Col([
-                         html.H3('Máximos e Mínimos'),
+                         html.H3('Estátisticas por time'),
                          dcc.Graph(
                              id='static-maxmin', config={"displayModeBar": False, "showTips": False})
                      ])
@@ -131,7 +131,7 @@ app.layout = dbc.Container(children=[
                 dbc.CardBody([
                     dbc.Row([
                      dbc.Col([
-                         html.H6('Ano de análise:'),
+                         html.H6('Time:'),
                          dcc.Dropdown(
                              id="select_ano",
                              value=df_main.at[df_main.index[1], 'ANO'],
@@ -141,36 +141,13 @@ app.layout = dbc.Container(children=[
                                 {"label": x, "value": x} for x in df_main.ANO.unique()
                              ]),
                      ], sm=6),
-                     dbc.Col([
-                         html.H6('Região de análise'),
-                         dcc.Dropdown(
-                             id="select_regiao",
-                             value=df_main.at[df_main.index[1], 'REGIÃO'],
-                             clearable=False,
-                             className='dbc',
-                             options=[{"label": x, "value": x} for x in df_main.REGIÃO.unique()
-                                      ]),
-                     ], sm=6)
-                     ]),
-                    dbc.Row([
-                        dbc.Col([
-                            dcc.Graph(id='regiaobar_graph', config={"displayModeBar": False, "showTips": False})
-                        ], sm=12, md=6),
-                        dbc.Col([
-                            dcc.Graph(id='estadobar_graph', config={ "displayModeBar": False, "showTips": False})
-                        ], sm=12, md=6)
-                    ], style= {'column-gap':'0px'})
-                ])
-            ],style=tab_card)
-        ],sm=12, lg=7)
-    ],className='g-2 my-auto'),
   #ROW 2
   dbc.Row([
     dbc.Col([
         dbc.Card([
             dbc.CardBody([
                 html.H3('Preço x Estado'),
-                html.H6('Comparação temporal entre estados'),
+                html.H6('Comparação temporal entre times'),
                 dbc.Row([
                     dbc.Col([
                         dcc.Dropdown(
@@ -196,7 +173,7 @@ app.layout = dbc.Container(children=[
         dbc.Card([
             dbc.CardBody([
                 html.H3('Comparação Direta'),
-                html.H6('Qual preço é menor em um dado período de tempo?'),
+                html.H6('Qual é o time mais eficiente?'),
                 dbc.Row([
                     dbc.Col([
                         dcc.Dropdown(
