@@ -118,6 +118,19 @@ app.layout = dbc.Container(children=[
                 dbc.CardBody([
                     dbc.Row([
                      dbc.Col([
+                         html.H3('Máximos e Mínimos'),
+                         dcc.Graph(
+                             id='static-maxmin', config={"displayModeBar": False, "showTips": False})
+                     ])
+                     ])
+                ])
+            ], style=tab_card)
+        ], sm=8, lg=3),
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row([
+                     dbc.Col([
                          html.H6('Ano de análise:'),
                          dcc.Dropdown(
                              id="select_ano",
@@ -149,7 +162,7 @@ app.layout = dbc.Container(children=[
                     ], style= {'column-gap':'0px'})
                 ])
             ],style=tab_card)
-        ],sm=20, lg=10)
+        ],sm=12, lg=7)
     ],className='g-2 my-auto'),
   #ROW 2
   dbc.Row([
@@ -233,11 +246,128 @@ app.layout = dbc.Container(children=[
     ],sm=12, lg=3, style={'height':'100%'})
   ],className='g-2 my-auto'),
 
+  #row 3
+  dbc.Row([
+    dbc.Col([
+        dbc.Card([
+            dbc.Row([
+                dbc.Col([
+                    dbc.Button([html.I(className='far fa-play-circle')], id="play-button", style={'margin-right':'15px'}),
+                    dbc.Button([html.I(className= 'far fa-pause-circle')], id="stop-button")
+                ],sm=12,md=1, style={'justify-content':'center', 'margin-top':'10px'}),
+                dbc.Col([
+                    dcc.RangeSlider(
+                         id='rangeslider',
+                         marks= {int(x): f'{x}' for x in df_main['ANO'].unique()},
+                         step=3,
+                         min=2004,
+                         max=2021,
+                         className='dbc',
+                         value=[2004,2021],
+                         dots=True,
+                         pushable=3,
+                         tooltip={'always_visible':False, 'placement': 'bottom'},
+
+                    )  
+                ],sm=12,md=10,style={'margin-top':'15px'}),
+                #UPDATE NA ANIMAÇÃO 
+                dcc.Interval(id='interval', interval=2000),
+            ],className='g-1', style={'height':'20%', 'justify-content':'center'})
+        ])
+    ],className='g-2 my-auto')
+  ])
+
 
 ], fluid=True, style={'height': '100%'})
 
 
 # ======== Callbacks ========== #
+
+#GRAFICO MAX/MIN
+@app.callback(
+    Output('static-maxmin', 'figure'),
+    [Input('dataset', 'data'),
+    Input(ThemeSwitchAIO.ids.switch("theme"), "value")]
+)
+def func(data, toggle):
+    template = template_theme1 if toggle else template_theme2
+
+    dff=pd.DataFrame(data)
+    max= dff.groupby(['ANO'])['VALOR REVENDA (R$/L)'].max()
+    min= dff.groupby(['ANO'])['VALOR REVENDA (R$/L)'].min()
+
+    final_df = pd.concat([max, min], axis=1)
+    final_df.columns = ['Max', 'Min']
+
+    fig = px.line(final_df, x=final_df.index, y=final_df.columns, template=template)
+    
+    # UPDATE
+    fig.update_layout(main_config, height=150, xaxis_title=None, yaxis_title=None)
+
+    return fig
+# CALBACK DAS BARRAS HORIZONTAIS 
+@app.callback(
+    [Output('regiaobar_graph', 'figure'),
+    Output('estadobar_graph', 'figure')],
+    [Input('dataset_fixed', 'data'),
+    Input('select_ano', 'value'),
+    Input('select_regiao', 'value'),
+    Input(ThemeSwitchAIO.ids.switch("theme"), "value")]
+)
+
+# ALTERAÇÃO DO TEMA NO GRAFICO
+def graph1(data, ano, regiao, toggle):
+    template = template_theme1 if toggle else template_theme2
+
+#FILTRANDO DATAFRAME POR ANO 
+    df = pd.DataFrame(data)
+    df_filtered = df[df.ANO.isin([ano])]
+
+#CRIANDO UM DATEFRAME PARA REGIÃO/ ESTADO PARA POSSIBILITAR A MANIPULAÇÃO E A MÉDIA
+    dff_regiao = df_filtered.groupby(['ANO', 'REGIÃO'])['VALOR REVENDA (R$/L)'].mean().reset_index()
+    dff_estado = df_filtered.groupby(['ANO', 'ESTADO', 'REGIÃO'])['VALOR REVENDA (R$/L)'].mean().reset_index()
+    dff_estado = dff_estado[dff_estado.REGIÃO.isin([regiao])]
+
+#ORGANIZANDO DE FORMA ASCENDENTE
+    dff_regiao = dff_regiao.sort_values(by='VALOR REVENDA (R$/L)',ascending=True)
+    dff_estado = dff_estado.sort_values(by='VALOR REVENDA (R$/L)',ascending=True)
+
+# DEFININDO 2 CASAS DECIMAIS 
+    dff_regiao['VALOR REVENDA (R$/L)'] = dff_regiao['VALOR REVENDA (R$/L)'].round(decimals = 2)
+    dff_estado['VALOR REVENDA (R$/L)'] = dff_estado['VALOR REVENDA (R$/L)'].round(decimals = 2)
+#TEXTO PARA FIGURA 1 E PARA FIGURA 2 
+    fig1_text = [f'{x} - R${y}' for x,y in zip(dff_regiao.REGIÃO.unique(), dff_regiao['VALOR REVENDA (R$/L)'].unique())]
+    fig2_text = [f'R${y} - {x}' for x,y in zip(dff_estado.ESTADO.unique(), dff_estado['VALOR REVENDA (R$/L)'].unique())]
+
+#GERANDO A FIGURA 1
+    fig1 = go.Figure(go.Bar(
+        x=dff_regiao['VALOR REVENDA (R$/L)'],
+        y=dff_regiao['REGIÃO'],
+        orientation='h',
+        text=fig1_text,
+        textposition='auto',
+        insidetextanchor='end',
+        insidetextfont=dict(family='Times', size=12)
+    ))
+    #GERANDO A FIGURA 2
+    fig2 = go.Figure(go.Bar(
+        x=dff_estado['VALOR REVENDA (R$/L)'],
+        y=dff_estado['ESTADO'],
+        orientation='h',
+        text=fig2_text,
+        insidetextanchor='end',
+        insidetextfont=dict(family='Times', size=12) 
+    ))
+
+    #INSERINDO TEMPLATE
+    fig1.update_layout(main_config, yaxis={'showticklabels':False}, height=150, template=template)
+    fig2.update_layout(main_config, yaxis={'showticklabels':False}, height=150, template=template)
+
+    # RANGE
+    fig1.update_layout(xaxis_range=[dff_regiao['VALOR REVENDA (R$/L)'].max(), dff_regiao['VALOR REVENDA (R$/L)'].min() - 0.15])
+    fig2.update_layout(xaxis_range=[dff_estado['VALOR REVENDA (R$/L)'].min() - 0.15, dff_estado['VALOR REVENDA (R$/L)'].max()])
+
+    return [fig1, fig2]
 
 # COMPARAÇÃO GRAFICO
 @app.callback(
@@ -402,7 +532,55 @@ def card2(data, estado, toggle):
     
     return fig
 
+# DATA RANGE
+@app.callback(
+    Output('dataset', 'data'),
+    [Input('rangeslider', 'value'),
+    Input('dataset_fixed', 'data')], prevent_initial_call=True
+)
+def range_slider(range, data):
+    dff = pd.DataFrame(data)
+    #O DATAFRAME ESTA DENTRO DA DATA INICIAL E ATÉ A DATA FINAL 
+    dff = dff[(dff['ANO'] >= f'{range[0]}-01-01') & (dff['ANO'] <= f'{range[1]}-31-12')]
+    #TRANSFORMANDO EM DICIONARIO 
+    data = dff.to_dict()
+    # RETORNANDO DE VOLTA PARA O DATASET - PEGA DADOS DO FIXO E PASSA PARA O ALTERAVEL 
+    return data
 
+#  ANIMAÇÃO RANGESLIDER
+@app.callback(
+    Output('rangeslider', 'value'),
+    Output('controller', 'data'), 
+
+    Input('interval', 'n_intervals'),
+    Input('play-button', 'n_clicks'),
+    Input('stop-button', 'n_clicks'),
+#ONDE O RANGESLIDER ESTÁ E SE ESTA PAUSADO OU RODANDO O PLAY
+    State('rangeslider', 'value'), 
+    State('controller', 'data'), 
+    prevent_initial_callbacks = True)
+
+def controller(n_intervals, play, stop, rangeslider, controller):
+    #Qual dos inputs estão sendo clicados (play, pause)
+    trigg = dash.callback_context.triggered[0]["prop_id"]
+
+    # se for falso ele vira true ao clicar no play o rangeslider vai para 2007
+    if ('play-button' in trigg and not controller["play"]):
+        if not controller["play"]:
+            controller["play"] = True
+            rangeslider[1] = 2007
+    # se o play estiver ativado ele pausa    
+    elif 'stop-button' in trigg:
+        if controller["play"]:
+            controller["play"] = False
+    # se ele chegar ao valor maximo ele pausa 
+    if controller["play"]:
+        if rangeslider[1] == 2021:
+            controller['play'] = False
+        rangeslider[1] += 1 if rangeslider[1] < 2021 else 0
+    
+    #retorna o valor da direita e se é para rodar ou não 
+    return rangeslider, controller
 # Run server
 if __name__ == '__main__':
     app.run_server(debug=True)
